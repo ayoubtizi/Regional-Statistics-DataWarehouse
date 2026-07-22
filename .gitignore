@@ -1,0 +1,14 @@
+# Python environment
+venv/
+
+# Python cache
+__pycache__/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+
+# Excel temporary files
+~$*.xlsx
