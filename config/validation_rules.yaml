@@ -1,0 +1,24 @@
+datasets:
+
+  population:
+    keywords:
+      - "Zone géographique"
+      - "Milieu de résidence"
+
+    description: "Population by geographic area and residence type"
+
+
+  unemployment_rate:
+    keywords:
+      - "Zone géographique"
+      - "Milieu de résidence"
+
+    description: "Unemployment indicators by geographic area"
+
+
+  consumer_price_index:
+    keywords:
+      - "Zone géographique"
+      - "Produit(IPC)"
+
+    description: "Consumer price index indicators"
