@@ -18,6 +18,7 @@ def run_step(command, name):
 
 
     print(result.stdout)
+    print(result.stderr)
 
 
     if result.returncode != 0:
@@ -62,6 +63,16 @@ def main():
             ],
             "Fact Loading"
         )
+        # 3. Quality checks
+
+        run_step(
+        [
+             sys.executable,
+             "-m",
+             "src.quality.warehouse_checks"
+        ],
+        "Warehouse Quality Checks"
+)
 
 
 
@@ -75,6 +86,15 @@ def main():
             ],
             "ETL Report Generation"
         )
+
+        run_step(
+            [
+                sys.executable,
+                "-m",
+                "src.analytics.run_analytics"
+            ],
+            "Analytics Report Generation"
+)
 
 
 
