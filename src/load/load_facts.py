@@ -1,7 +1,9 @@
 import os
 import pandas as pd
 
-from database import get_connection
+from src.load.database import get_connection
+from src.utils.logger import start_log, update_log
+
 
 
 # =====================================================
@@ -16,11 +18,13 @@ BASE_DIR = os.path.dirname(
     )
 )
 
+
 PROCESSED_PATH = os.path.join(
     BASE_DIR,
     "data",
     "processed"
 )
+
 
 
 # =====================================================
@@ -46,36 +50,70 @@ def clean_values(rows):
 
 
 
-def execute_insert(query, rows):
+def execute_upsert(query, rows):
 
     rows = clean_values(rows)
 
     conn = get_connection()
     cursor = conn.cursor()
 
+
+    inserted = 0
+    updated = 0
+
+
     try:
 
-        cursor.executemany(
-            query,
-            rows
-        )
+        for row in rows:
+
+            cursor.execute(
+                query,
+                row
+            )
+
+
+            result = cursor.fetchone()
+
+
+            if result[0] == "INSERT":
+
+                inserted += 1
+
+            else:
+
+                updated += 1
+
+
 
         conn.commit()
+
+
+        return {
+
+            "read": len(rows),
+
+            "inserted": inserted,
+
+            "updated": updated
+
+        }
+
 
 
     except Exception as e:
 
         conn.rollback()
-        print("Insert failed:")
-        print(e)
 
         raise e
+
 
 
     finally:
 
         cursor.close()
+
         conn.close()
+
 
 
 
@@ -97,6 +135,7 @@ def load_population_fact():
     df = pd.read_excel(file_path)
 
 
+
     df["population_count"] = pd.to_numeric(
         df["population_count"],
         errors="coerce"
@@ -113,6 +152,7 @@ def load_population_fact():
     )
 
 
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -120,7 +160,9 @@ def load_population_fact():
     rows = []
 
 
+
     for _, row in df.iterrows():
+
 
         cursor.execute(
             """
@@ -133,14 +175,7 @@ def load_population_fact():
             )
         )
 
-        time = cursor.fetchone()
-
-        if time is None:
-            raise Exception(
-                f"Missing year dimension: {row['year']}"
-            )
-
-        time_id = time[0]
+        time_id = cursor.fetchone()[0]
 
 
 
@@ -155,14 +190,7 @@ def load_population_fact():
             )
         )
 
-        geo = cursor.fetchone()
-
-        if geo is None:
-            raise Exception(
-                f"Missing geography: {row['geo_name']}"
-            )
-
-        geo_id = geo[0]
+        geo_id = cursor.fetchone()[0]
 
 
 
@@ -177,14 +205,7 @@ def load_population_fact():
             )
         )
 
-        residence = cursor.fetchone()
-
-        if residence is None:
-            raise Exception(
-                f"Missing residence: {row['residence_type']}"
-            )
-
-        residence_id = residence[0]
+        residence_id = cursor.fetchone()[0]
 
 
 
@@ -198,29 +219,13 @@ def load_population_fact():
         )
 
 
+
     cursor.close()
     conn.close()
 
 
 
-    # Debug before insertion
-
-    print("\nFirst 10 rows:")
-
-    for r in rows[:10]:
-        print(r)
-
-
-    print(
-        "\nMaximum population value:",
-        max(
-            r[3]
-            for r in rows
-        )
-    )
-
-
-    execute_insert(
+    stats = execute_upsert(
 
         """
         INSERT INTO warehouse.fact_population
@@ -231,7 +236,32 @@ def load_population_fact():
             population_count
         )
 
-        VALUES (%s,%s,%s,%s);
+        VALUES (%s,%s,%s,%s)
+
+
+        ON CONFLICT
+        (
+            time_id,
+            geo_id,
+            residence_id
+        )
+
+
+        DO UPDATE SET
+
+        population_count = EXCLUDED.population_count
+
+
+        RETURNING
+
+        CASE
+
+            WHEN xmax = 0 THEN 'INSERT'
+
+            ELSE 'UPDATE'
+
+        END;
+
         """,
 
         rows
@@ -239,12 +269,19 @@ def load_population_fact():
     )
 
 
+
     print(
-        f"fact_population loaded: {len(rows)} rows"
+        f"""
+fact_population completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Updated: {stats['updated']}
+"""
     )
 
 
-
+    return stats 
 # =====================================================
 # FACT UNEMPLOYMENT
 # =====================================================
@@ -262,18 +299,21 @@ def load_unemployment_fact():
     )
 
 
-    conn=get_connection()
-    cursor=conn.cursor()
-
-    rows=[]
+    conn = get_connection()
+    cursor = conn.cursor()
 
 
-    for _,row in df.iterrows():
+    rows = []
+
+
+
+    for _, row in df.iterrows():
 
 
         cursor.execute(
             """
-            SELECT time_id FROM warehouse.dim_time
+            SELECT time_id
+            FROM warehouse.dim_time
             WHERE year=%s
             """,
             (
@@ -281,13 +321,14 @@ def load_unemployment_fact():
             )
         )
 
-        time_id=cursor.fetchone()[0]
+        time_id = cursor.fetchone()[0]
 
 
 
         cursor.execute(
             """
-            SELECT geo_id FROM warehouse.dim_geography
+            SELECT geo_id
+            FROM warehouse.dim_geography
             WHERE geo_name=%s
             """,
             (
@@ -295,13 +336,14 @@ def load_unemployment_fact():
             )
         )
 
-        geo_id=cursor.fetchone()[0]
+        geo_id = cursor.fetchone()[0]
 
 
 
         cursor.execute(
             """
-            SELECT residence_id FROM warehouse.dim_residence
+            SELECT residence_id
+            FROM warehouse.dim_residence
             WHERE residence_type=%s
             """,
             (
@@ -309,13 +351,14 @@ def load_unemployment_fact():
             )
         )
 
-        residence_id=cursor.fetchone()[0]
+        residence_id = cursor.fetchone()[0]
 
 
 
         cursor.execute(
             """
-            SELECT sex_id FROM warehouse.dim_sex
+            SELECT sex_id
+            FROM warehouse.dim_sex
             WHERE sex_label=%s
             """,
             (
@@ -323,7 +366,7 @@ def load_unemployment_fact():
             )
         )
 
-        sex_id=cursor.fetchone()[0]
+        sex_id = cursor.fetchone()[0]
 
 
 
@@ -338,12 +381,13 @@ def load_unemployment_fact():
         )
 
 
+
     cursor.close()
     conn.close()
 
 
 
-    execute_insert(
+    stats = execute_upsert(
 
         """
         INSERT INTO warehouse.fact_unemployment
@@ -355,16 +399,61 @@ def load_unemployment_fact():
             unemployment_rate
         )
 
-        VALUES (%s,%s,%s,%s,%s);
+
+        VALUES (%s,%s,%s,%s,%s)
+
+
+
+        ON CONFLICT
+        (
+            time_id,
+            geo_id,
+            residence_id,
+            sex_id
+        )
+
+
+
+        DO UPDATE SET
+
+        unemployment_rate = EXCLUDED.unemployment_rate
+
+
+
+        RETURNING
+
+        CASE
+
+            WHEN xmax = 0 THEN 'INSERT'
+
+            ELSE 'UPDATE'
+
+        END;
+
         """,
 
         rows
+
     )
+
 
 
     print(
-        f"fact_unemployment loaded: {len(rows)} rows"
+        f"""
+fact_unemployment completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Updated: {stats['updated']}
+"""
     )
+
+
+    return stats
+
+
+
+
 
 
 
@@ -377,7 +466,8 @@ def load_cpi_fact():
     print("\nLoading fact_cpi...")
 
 
-    df=pd.read_excel(
+
+    df = pd.read_excel(
         os.path.join(
             PROCESSED_PATH,
             "cpi_processed.xlsx"
@@ -385,18 +475,24 @@ def load_cpi_fact():
     )
 
 
-    conn=get_connection()
-    cursor=conn.cursor()
 
-    rows=[]
+    conn = get_connection()
+    cursor = conn.cursor()
 
 
-    for _,row in df.iterrows():
+
+    rows = []
+
+
+
+    for _, row in df.iterrows():
+
 
 
         cursor.execute(
             """
-            SELECT time_id FROM warehouse.dim_time
+            SELECT time_id
+            FROM warehouse.dim_time
             WHERE year=%s
             """,
             (
@@ -404,13 +500,14 @@ def load_cpi_fact():
             )
         )
 
-        time_id=cursor.fetchone()[0]
+        time_id = cursor.fetchone()[0]
 
 
 
         cursor.execute(
             """
-            SELECT geo_id FROM warehouse.dim_geography
+            SELECT geo_id
+            FROM warehouse.dim_geography
             WHERE geo_name=%s
             """,
             (
@@ -418,13 +515,14 @@ def load_cpi_fact():
             )
         )
 
-        geo_id=cursor.fetchone()[0]
+        geo_id = cursor.fetchone()[0]
 
 
 
         cursor.execute(
             """
-            SELECT product_id FROM warehouse.dim_product
+            SELECT product_id
+            FROM warehouse.dim_product
             WHERE product_category=%s
             """,
             (
@@ -432,7 +530,7 @@ def load_cpi_fact():
             )
         )
 
-        product_id=cursor.fetchone()[0]
+        product_id = cursor.fetchone()[0]
 
 
 
@@ -446,12 +544,13 @@ def load_cpi_fact():
         )
 
 
+
     cursor.close()
     conn.close()
 
 
 
-    execute_insert(
+    stats = execute_upsert(
 
         """
         INSERT INTO warehouse.fact_cpi
@@ -462,37 +561,165 @@ def load_cpi_fact():
             cpi_value
         )
 
-        VALUES (%s,%s,%s,%s);
+
+        VALUES (%s,%s,%s,%s)
+
+
+
+        ON CONFLICT
+        (
+            time_id,
+            geo_id,
+            product_id
+        )
+
+
+
+        DO UPDATE SET
+
+        cpi_value = EXCLUDED.cpi_value
+
+
+
+        RETURNING
+
+        CASE
+
+            WHEN xmax = 0 THEN 'INSERT'
+
+            ELSE 'UPDATE'
+
+        END;
+
         """,
 
         rows
+
     )
+
 
 
     print(
-        f"fact_cpi loaded: {len(rows)} rows"
+        f"""
+fact_cpi completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Updated: {stats['updated']}
+"""
     )
 
 
-
+    return stats
 # =====================================================
-# MAIN
+# MAIN WITH ETL LOGGING
 # =====================================================
 
 if __name__ == "__main__":
 
-    print(
-        "Starting fact loading..."
+
+    log_id = start_log(
+        "FACTS_LOADING",
+        "processed_files"
     )
 
 
-    load_population_fact()
+    try:
 
-    load_unemployment_fact()
+        print(
+            "Starting fact loading..."
+        )
 
-    load_cpi_fact()
+
+        population_stats = load_population_fact()
+
+        unemployment_stats = load_unemployment_fact()
+
+        cpi_stats = load_cpi_fact()
 
 
-    print(
-        "\nAll facts loaded successfully"
-    )
+
+        total_read = (
+            population_stats["read"]
+            +
+            unemployment_stats["read"]
+            +
+            cpi_stats["read"]
+        )
+
+
+        total_inserted = (
+            population_stats["inserted"]
+            +
+            unemployment_stats["inserted"]
+            +
+            cpi_stats["inserted"]
+        )
+
+
+        total_updated = (
+            population_stats["updated"]
+            +
+            unemployment_stats["updated"]
+            +
+            cpi_stats["updated"]
+        )
+
+
+
+        print(
+            f"""
+==================================================
+FACT LOADING SUMMARY
+==================================================
+
+Rows read:
+{total_read}
+
+Inserted:
+{total_inserted}
+
+Updated:
+{total_updated}
+
+==================================================
+"""
+        )
+
+
+
+        update_log(
+
+            log_id,
+
+            total_read,
+
+            "SUCCESS"
+
+        )
+
+
+
+        print(
+            "All facts loaded successfully"
+        )
+
+
+
+    except Exception as e:
+
+
+        update_log(
+
+            log_id,
+
+            0,
+
+            "FAILED",
+
+            str(e)
+
+        )
+
+
+        raise e

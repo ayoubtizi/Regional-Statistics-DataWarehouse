@@ -1,7 +1,9 @@
 import os
 import pandas as pd
 
-from database import get_connection
+from src.load.database import get_connection
+from src.utils.logger import start_log, update_log
+
 
 
 # =====================================================
@@ -16,6 +18,7 @@ BASE_DIR = os.path.dirname(
     )
 )
 
+
 PROCESSED_PATH = os.path.join(
     BASE_DIR,
     "data",
@@ -23,51 +26,104 @@ PROCESSED_PATH = os.path.join(
 )
 
 
+
 # =====================================================
-# Load dimension helper
+# Helpers
 # =====================================================
 
-def execute_insert(query, values):
+def clean_values(values):
 
-    # Convert numpy data types to Python native types
     cleaned_values = []
+
 
     for row in values:
 
-        cleaned_row = tuple(
-            value.item()
-            if hasattr(value, "item")
-            else value
-            for value in row
+        cleaned_values.append(
+
+            tuple(
+                value.item()
+                if hasattr(value, "item")
+                else value
+
+                for value in row
+            )
+
         )
 
-        cleaned_values.append(cleaned_row)
+
+    return cleaned_values
+
+
+
+
+def execute_dimension_insert(query, values):
+
+
+    values = clean_values(values)
 
 
     conn = get_connection()
     cursor = conn.cursor()
 
+
+    inserted = 0
+    skipped = 0
+
+
+
     try:
 
-        cursor.executemany(
-            query,
-            cleaned_values
-        )
+
+        for row in values:
+
+
+            cursor.execute(
+                query,
+                row
+            )
+
+
+            if cursor.rowcount == 1:
+
+                inserted += 1
+
+            else:
+
+                skipped += 1
+
+
 
         conn.commit()
 
 
+
+        return {
+
+            "read": len(values),
+
+            "inserted": inserted,
+
+            "skipped": skipped
+
+        }
+
+
+
     except Exception as e:
 
+
         conn.rollback()
+
         raise e
+
 
 
     finally:
 
-        cursor.close()
-        conn.close()
 
+        cursor.close()
+
+        conn.close()
 # =====================================================
 # dim_time
 # =====================================================
@@ -93,6 +149,7 @@ def load_time_dimension():
 
         df = pd.read_excel(path)
 
+
         years.update(
             df["year"]
             .dropna()
@@ -101,11 +158,12 @@ def load_time_dimension():
         )
 
 
+
     values = [
 
         (
-            year,
-            (year // 10) * 10
+            int(year),
+            int((year // 10) * 10)
         )
 
         for year in years
@@ -113,7 +171,8 @@ def load_time_dimension():
     ]
 
 
-    execute_insert(
+
+    stats = execute_dimension_insert(
 
         """
         INSERT INTO warehouse.dim_time
@@ -129,12 +188,25 @@ def load_time_dimension():
         """,
 
         values
+
     )
+
 
 
     print(
-        f"dim_time loaded: {len(values)} rows"
+        f"""
+dim_time completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Skipped: {stats['skipped']}
+"""
     )
+
+
+    return stats
+
+
 
 
 
@@ -144,6 +216,7 @@ def load_time_dimension():
 
 def load_geography_dimension():
 
+
     files = [
         "population_processed.xlsx",
         "unemployment_processed.xlsx",
@@ -151,24 +224,32 @@ def load_geography_dimension():
     ]
 
 
+
     geography = set()
 
 
+
     for file in files:
+
 
         path = os.path.join(
             PROCESSED_PATH,
             file
         )
 
+
         df = pd.read_excel(path)
 
 
+
         geography.update(
+
             df["geo_name"]
             .dropna()
             .unique()
+
         )
+
 
 
     values = [
@@ -180,7 +261,8 @@ def load_geography_dimension():
     ]
 
 
-    execute_insert(
+
+    stats = execute_dimension_insert(
 
         """
         INSERT INTO warehouse.dim_geography
@@ -195,12 +277,25 @@ def load_geography_dimension():
         """,
 
         values
+
     )
+
 
 
     print(
-        f"dim_geography loaded: {len(values)} rows"
+        f"""
+dim_geography completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Skipped: {stats['skipped']}
+"""
     )
+
+
+    return stats
+
+
 
 
 
@@ -210,13 +305,16 @@ def load_geography_dimension():
 
 def load_residence_dimension():
 
+
     path = os.path.join(
         PROCESSED_PATH,
         "population_processed.xlsx"
     )
 
 
+
     df = pd.read_excel(path)
+
 
 
     values = [
@@ -231,7 +329,8 @@ def load_residence_dimension():
     ]
 
 
-    execute_insert(
+
+    stats = execute_dimension_insert(
 
         """
         INSERT INTO warehouse.dim_residence
@@ -246,20 +345,29 @@ def load_residence_dimension():
         """,
 
         values
+
     )
+
 
 
     print(
-        f"dim_residence loaded: {len(values)} rows"
+        f"""
+dim_residence completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Skipped: {stats['skipped']}
+"""
     )
 
 
-
+    return stats
 # =====================================================
 # dim_sex
 # =====================================================
 
 def load_sex_dimension():
+
 
     path = os.path.join(
         PROCESSED_PATH,
@@ -268,6 +376,7 @@ def load_sex_dimension():
 
 
     df = pd.read_excel(path)
+
 
 
     values = [
@@ -282,7 +391,8 @@ def load_sex_dimension():
     ]
 
 
-    execute_insert(
+
+    stats = execute_dimension_insert(
 
         """
         INSERT INTO warehouse.dim_sex
@@ -297,12 +407,27 @@ def load_sex_dimension():
         """,
 
         values
+
     )
+
 
 
     print(
-        f"dim_sex loaded: {len(values)} rows"
+        f"""
+dim_sex completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Skipped: {stats['skipped']}
+"""
     )
+
+
+    return stats
+
+
+
+
 
 
 
@@ -312,6 +437,7 @@ def load_sex_dimension():
 
 def load_product_dimension():
 
+
     path = os.path.join(
         PROCESSED_PATH,
         "cpi_processed.xlsx"
@@ -319,6 +445,7 @@ def load_product_dimension():
 
 
     df = pd.read_excel(path)
+
 
 
     values = [
@@ -333,7 +460,8 @@ def load_product_dimension():
     ]
 
 
-    execute_insert(
+
+    stats = execute_dimension_insert(
 
         """
         INSERT INTO warehouse.dim_product
@@ -348,36 +476,177 @@ def load_product_dimension():
         """,
 
         values
+
     )
+
 
 
     print(
-        f"dim_product loaded: {len(values)} rows"
+        f"""
+dim_product completed
+
+Rows read: {stats['read']}
+Inserted: {stats['inserted']}
+Skipped: {stats['skipped']}
+"""
     )
+
+
+    return stats
+
+
+
 
 
 
 # =====================================================
-# Main pipeline
+# MAIN PIPELINE WITH LOGGING
 # =====================================================
 
 if __name__ == "__main__":
 
 
-    print("Starting dimension loading...")
-
-
-    load_time_dimension()
-
-    load_geography_dimension()
-
-    load_residence_dimension()
-
-    load_sex_dimension()
-
-    load_product_dimension()
-
-
-    print(
-        "All dimensions loaded successfully"
+    log_id = start_log(
+        "DIMENSIONS_LOADING",
+        "processed_files"
     )
+
+
+
+    try:
+
+
+        print(
+            "Starting dimension loading..."
+        )
+
+
+
+        time_stats = load_time_dimension()
+
+        geo_stats = load_geography_dimension()
+
+        residence_stats = load_residence_dimension()
+
+        sex_stats = load_sex_dimension()
+
+        product_stats = load_product_dimension()
+
+
+
+        total_read = (
+
+            time_stats["read"]
+
+            +
+            geo_stats["read"]
+
+            +
+            residence_stats["read"]
+
+            +
+            sex_stats["read"]
+
+            +
+            product_stats["read"]
+
+        )
+
+
+
+        total_inserted = (
+
+            time_stats["inserted"]
+
+            +
+            geo_stats["inserted"]
+
+            +
+            residence_stats["inserted"]
+
+            +
+            sex_stats["inserted"]
+
+            +
+            product_stats["inserted"]
+
+        )
+
+
+
+        total_skipped = (
+
+            time_stats["skipped"]
+
+            +
+            geo_stats["skipped"]
+
+            +
+            residence_stats["skipped"]
+
+            +
+            sex_stats["skipped"]
+
+            +
+            product_stats["skipped"]
+
+        )
+
+
+
+        print(
+            f"""
+==================================================
+DIMENSION LOADING SUMMARY
+==================================================
+
+Rows read:
+{total_read}
+
+Inserted:
+{total_inserted}
+
+Skipped:
+{total_skipped}
+
+==================================================
+"""
+        )
+
+
+
+        update_log(
+
+            log_id,
+
+            total_read,
+
+            "SUCCESS"
+
+        )
+
+
+
+        print(
+            "All dimensions loaded successfully"
+        )
+
+
+
+    except Exception as e:
+
+
+        update_log(
+
+            log_id,
+
+            0,
+
+            "FAILED",
+
+            str(e)
+
+        )
+
+
+        raise e        
