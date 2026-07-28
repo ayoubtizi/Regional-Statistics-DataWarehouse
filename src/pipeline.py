@@ -5,25 +5,18 @@ import sys
 
 def run_step(command, name):
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 60)
     print(f"Running {name}")
-    print("="*50)
+    print("=" * 60)
 
 
     result = subprocess.run(
         command,
-        capture_output=True,
         text=True
     )
 
 
-    print(result.stdout)
-    print(result.stderr)
-
-
     if result.returncode != 0:
-
-        print(result.stderr)
 
         raise Exception(
             f"{name} failed"
@@ -33,14 +26,31 @@ def run_step(command, name):
 
 def main():
 
-
-    print("Starting complete ETL pipeline")
+    print("\nSTARTING COMPLETE ETL PIPELINE")
 
 
     try:
 
 
-        # 1. Load dimensions
+        run_step(
+            [
+                sys.executable,
+                "-m",
+                "src.ingestion"
+            ],
+            "Data Ingestion and Validation"
+        )
+
+
+        run_step(
+            [
+                sys.executable,
+                "-m",
+                "src.transformation"
+            ],
+            "Data Transformation"
+        )
+
 
         run_step(
             [
@@ -52,9 +62,6 @@ def main():
         )
 
 
-
-        # 2. Load facts
-
         run_step(
             [
                 sys.executable,
@@ -63,29 +70,17 @@ def main():
             ],
             "Fact Loading"
         )
-        # 3. Quality checks
 
-        run_step(
-        [
-             sys.executable,
-             "-m",
-             "src.quality.warehouse_checks"
-        ],
-        "Warehouse Quality Checks"
-)
-
-
-
-        # 3. Generate Excel report
 
         run_step(
             [
                 sys.executable,
                 "-m",
-                "src.reports.export_etl_logs"
+                "src.quality.warehouse_checks"
             ],
-            "ETL Report Generation"
+            "Warehouse Quality Checks"
         )
+
 
         run_step(
             [
@@ -94,22 +89,28 @@ def main():
                 "src.analytics.run_analytics"
             ],
             "Analytics Report Generation"
-)
-
-
-
-        print(
-            "\nETL PIPELINE COMPLETED SUCCESSFULLY"
         )
+
+
+        run_step(
+            [
+                sys.executable,
+                "-m",
+                "src.reports.export_etl_logs"
+            ],
+            "ETL Logs Report Generation"
+        )
+
+
+        print("\n" + "=" * 60)
+        print("ETL PIPELINE COMPLETED SUCCESSFULLY")
+        print("=" * 60)
 
 
 
     except Exception as e:
 
-        print(
-            "\nPIPELINE FAILED"
-        )
-
+        print("\nPIPELINE FAILED")
         print(e)
 
         raise e

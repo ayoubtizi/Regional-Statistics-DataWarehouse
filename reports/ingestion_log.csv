@@ -3,3 +3,5 @@
 2026-07-27 21:19:37.797640,unemployment_rate.xlsx,SUCCESS,Schema valid,data/raw\unemployment_rate.xlsx
 2026-07-27 21:35:26.433253,population_missing_residence_keyword.xlsx,FAILED,Missing keyword: Milieu de résidence,data/rejected\population_missing_residence_keyword.xlsx
 2026-07-27 21:35:26.447955,unemployment_missing_geo_keyword.xlsx,FAILED,Missing keyword: Zone géographique,data/rejected\unemployment_missing_geo_keyword.xlsx
+2026-07-28 08:51:19.410136,population_missing_residence_keyword.xlsx,FAILED,Missing keyword: Milieu de résidence,data/rejected\population_missing_residence_keyword.xlsx
+2026-07-28 08:51:19.450179,unemployment_missing_geo_keyword.xlsx,FAILED,Missing keyword: Zone géographique,data/rejected\unemployment_missing_geo_keyword.xlsx

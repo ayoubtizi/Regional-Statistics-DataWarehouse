@@ -3,7 +3,7 @@ import shutil
 import csv
 from datetime import datetime
 
-from validation import validate_file, load_rules
+from src.validation import validate_file, load_rules
 
 
 # =============================
@@ -260,5 +260,4 @@ def run_ingestion():
 # =============================
 
 if __name__ == "__main__":
-
     run_ingestion()
